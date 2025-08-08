@@ -32,6 +32,7 @@ async def main() -> None:
         r.raise_for_status()
         print("initialize:", r.json())
         sid = r.headers.get("Mcp-Session-Id") or r.headers.get("mcp-session-id")
+        print("session id:", sid)
         headers = {"Mcp-Session-Id": sid} if sid else {}
 
         # Send Initialized notification

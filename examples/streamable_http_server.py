@@ -19,6 +19,7 @@ from mcp_db.core.event_store import EventStore as DbEventStore
 from mcp_db.core.session_manager import SessionManager as DbSessionManager
 from mcp_db.core.interceptor import ProtocolInterceptor
 from mcp_db.core.asgi_wrapper import ASGITransportWrapper
+from mcp_db.core.admission import StreamableHTTPAdmissionController
 from mcp_db.storage.redis_adapter import RedisStorage
 
 
@@ -130,9 +131,28 @@ def main(port: int, log_level: str, json_response: bool) -> int:
     db_event_store = DbEventStore(storage)
     db_sessions = DbSessionManager(storage=storage, event_store=db_event_store)
     interceptor = ProtocolInterceptor(db_sessions)
-    
+
+    # Admission controller for the SDK manager
+    admission = StreamableHTTPAdmissionController(manager=session_manager, app=app)
+
+    # Helper to let wrapper consult storage without importing adapters
+    async def lookup_session(session_id: str):
+        sess = await db_sessions.get(session_id)
+        return None if sess is None else {
+            "id": sess.id,
+            "status": getattr(sess.status, "value", str(sess.status)),
+            "client_id": sess.client_id,
+            "server_id": sess.server_id,
+            "capabilities": sess.capabilities,
+            "metadata": sess.metadata,
+        }
+
     # Wrap the ASGI transport for the mounted MCP endpoint
-    wrapped_mcp_asgi = ASGITransportWrapper(interceptor).wrap(handle_streamable_http)
+    wrapped_mcp_asgi = ASGITransportWrapper(
+        interceptor,
+        admission_controller=admission,
+        session_lookup=lookup_session,
+    ).wrap(handle_streamable_http)
 
     starlette_app = Starlette(
         debug=True,

@@ -5,6 +5,7 @@ import json
 import typing as t
 
 from .interceptor import ProtocolInterceptor
+from .admission import TransportAdmissionController
 
 
 Scope = t.Dict[str, t.Any]
@@ -26,8 +27,19 @@ class ASGITransportWrapper:
         asgi_app = wrapper.wrap(inner_app)
     """
 
-    def __init__(self, interceptor: ProtocolInterceptor) -> None:
+    def __init__(
+        self,
+        interceptor: ProtocolInterceptor,
+        admission_controller: t.Optional[TransportAdmissionController] = None,
+        *,
+        session_lookup: t.Optional[t.Callable[[str], t.Awaitable[t.Optional[t.Dict[str, t.Any]]]]] = None,
+    ) -> None:
         self._interceptor = interceptor
+        self._admission = admission_controller
+        # warmed sessions on this node to avoid duplicate internal warming
+        self._warmed: set[str] = set()
+        # Optional injector for fetching session objects without importing storage here
+        self._session_lookup = session_lookup
 
     def wrap(self, inner_app: t.Callable[[Scope, Receive, Send], t.Awaitable[None]]):
         async def app(scope: Scope, receive: Receive, send: Send) -> None:
@@ -174,8 +186,117 @@ class ASGITransportWrapper:
                     # Ensure wrapper never raises to ASGI stack from here
                     raise
 
+            # Admission + warming: if applicable, attempt reconstruction BEFORE forwarding
+            # Only for non-initialize, non-initialized requests with a known session id
+            async def maybe_admit_and_warm() -> None:
+                if self._admission is None:
+                    return
+                try:
+                    # Determine method from buffered body if available
+                    method: str | None = None
+                    try:
+                        payload = json.loads(original_body.decode("utf-8")) if original_body else {}
+                        method = payload.get("method")
+                    except Exception:
+                        method = None
+
+                    if method in {"initialize", "initialized", "notifications/initialized"}:
+                        return
+
+                    if not session_id:
+                        # Try grabbing from headers (GET/SSE)
+                        try:
+                            session_id_local = self._interceptor._extract_session_id({}, context)
+                        except Exception:
+                            session_id_local = None
+                    else:
+                        session_id_local = session_id
+
+                    if not session_id_local:
+                        return
+
+                    # If already present in SDK, nothing to do
+                    if self._admission.has_session(session_id_local):
+                        return
+
+                    # Consult storage (if provided) to check status and decide warming
+                    sess_obj: t.Optional[t.Dict[str, t.Any]] = None
+                    if self._session_lookup is not None:
+                        try:
+                            sess_obj = await self._session_lookup(session_id_local)
+                        except Exception:
+                            sess_obj = None
+
+                    # Reconstruct transport for INITIALIZED/ACTIVE; if unknown, best-effort reconstruct
+                    if sess_obj is not None:
+                        status = str(sess_obj.get("status", "")).upper()
+                        if status in {"INITIALIZED", "ACTIVE"}:
+                            await self._admission.ensure_session_transport(session_id_local)
+                            # Warm only if ACTIVE and not yet warmed on this node
+                            if status == "ACTIVE" and session_id_local not in self._warmed:
+                                await self._send_internal_initialized(inner_app, scope, session_id_local)
+                                self._warmed.add(session_id_local)
+                        # For INITIALIZING/CLOSED, do nothing here
+                    else:
+                        # No record in storage: still reconstruct to let SDK admit; then warm once
+                        await self._admission.ensure_session_transport(session_id_local)
+                        if session_id_local not in self._warmed:
+                            await self._send_internal_initialized(inner_app, scope, session_id_local)
+                            self._warmed.add(session_id_local)
+                except Exception:
+                    # Never block request on admission errors
+                    pass
+
+            await maybe_admit_and_warm()
+
             await inner_app(scope, wrapped_receive, wrapped_send)
 
         return app
+
+    async def _send_internal_initialized(
+        self,
+        inner_app: t.Callable[[Scope, Receive, Send], t.Awaitable[None]],
+        scope: Scope,
+        session_id: str,
+    ) -> None:
+        """Send a one-shot internal notifications/initialized to warm this node.
+
+        This request is not exposed to the client; we synthesize a POST with the
+        correct header and consume the response locally.
+        """
+        # Clone scope with adjusted headers to include the session id
+        headers_list: list[tuple[bytes, bytes]] = []
+        try:
+            headers_list = list(scope.get("headers", []))
+        except Exception:
+            headers_list = []
+        # Ensure mcp-session-id header present
+        headers_lower = {k.decode("latin1").lower(): v for k, v in headers_list}
+        if "mcp-session-id" not in headers_lower and "x-mcp-session-id" not in headers_lower:
+            headers_list.append((b"mcp-session-id", session_id.encode("latin1")))
+
+        warm_scope = dict(scope)
+        warm_scope["headers"] = headers_list
+
+        warm_payload = {
+            "jsonrpc": "2.0",
+            "method": "notifications/initialized",
+        }
+        body_bytes = json.dumps(warm_payload).encode("utf-8")
+
+        async def warm_receive() -> t.Dict[str, t.Any]:
+            nonlocal body_bytes
+            b = body_bytes
+            body_bytes = b""
+            return {"type": "http.request", "body": b, "more_body": False}
+
+        async def warm_send(_message: t.Dict[str, t.Any]) -> None:  # consume silently
+            return
+
+        try:
+            await inner_app(warm_scope, warm_receive, warm_send)
+        except Exception:
+            # Do not propagate warming errors
+            pass
 
 

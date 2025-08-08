@@ -23,13 +23,23 @@ def docker_compose_file_default() -> str:
 
 
 def _clean_output(text: str) -> str:
-    # Drop docker compose WARN lines and empty lines
-    lines = []
+    # Drop docker compose WARN blocks (including wrapped lines) and empty lines
+    lines: list[str] = []
+    skipping_warn = False
     for ln in text.splitlines():
         s = ln.strip()
         if not s:
+            # stop skipping warn after a blank line
+            skipping_warn = False
             continue
         if s.startswith("WARN[") or s.startswith("WARNING"):
+            skipping_warn = True
+            continue
+        if skipping_warn:
+            # skip wrapped lines that belong to the warn message
+            continue
+        # also skip known compose warning fragments if they appear standalone
+        if "the attribute `version` is obsolete" in s:
             continue
         lines.append(s)
     return "\n".join(lines)
@@ -58,7 +68,17 @@ def list_session_keys(compose_file: str, prefix: str) -> List[str]:
     out = run_redis_cli(compose_file, ["KEYS", f"{prefix}:session:*"])
     if not out:
         return []
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    keys = [line.strip() for line in out.splitlines() if line.strip()]
+    # Filter to only our prefix to avoid stray noise
+    return [k for k in keys if k.startswith(f"{prefix}:")]
+
+
+def list_event_keys(compose_file: str, prefix: str) -> List[str]:
+    out = run_redis_cli(compose_file, ["KEYS", f"{prefix}:events:*"])
+    if not out:
+        return []
+    keys = [line.strip() for line in out.splitlines() if line.strip()]
+    return [k for k in keys if k.startswith(f"{prefix}:")]
 
 
 def get_session_json(compose_file: str, key: str) -> Dict:
@@ -97,7 +117,7 @@ def clear_session(compose_file: str, prefix: str, session_id: str) -> None:
 
 def clear_all(compose_file: str, prefix: str) -> None:
     keys = run_redis_cli(compose_file, ["KEYS", f"{prefix}:*"])
-    ks = [k for k in keys.splitlines() if k]
+    ks = [k for k in keys.splitlines() if k and k.startswith(f"{prefix}:")]
     if ks:
         run_redis_cli(compose_file, ["DEL", *ks])
 
@@ -105,10 +125,13 @@ def clear_all(compose_file: str, prefix: str) -> None:
 def monitor(compose_file: str, prefix: str, interval: float, tail: int) -> None:
     while True:
         print(f"\n[{_now()}] Redis monitor prefix='{prefix}' (compose={compose_file})")
-        keys = list_session_keys(compose_file, prefix)
-        if not keys:
-            print("  No sessions found.")
-        for idx, skey in enumerate(sorted(keys), start=1):
+        s_keys = list_session_keys(compose_file, prefix)
+        e_keys = list_event_keys(compose_file, prefix)
+        if not s_keys and not e_keys:
+            print("  No sessions or event streams found.")
+        idx = 1
+        # Show sessions first
+        for skey in sorted(s_keys):
             sid = skey.split(":")[-1]
             sess = get_session_json(compose_file, skey)
             status = str(sess.get("status", "UNKNOWN"))
@@ -117,8 +140,22 @@ def monitor(compose_file: str, prefix: str, interval: float, tail: int) -> None:
             print(f"  [{idx:02d}] {sid}  status={status:<12}  events={length}")
             if tail > 0 and length > 0:
                 entries = stream_tail(compose_file, ev_key, tail)
-                for line in entries[::-1]:  # oldest first among tail
+                for line in entries[::-1]:
                     print(f"      - {line}")
+            idx += 1
+        # If there are event streams without session entries, show them too
+        for ekey in sorted(e_keys):
+            sid = ekey.split(":")[-1]
+            skey = f"{prefix}:session:{sid}"
+            if skey in s_keys:
+                continue
+            length = stream_len(compose_file, ekey)
+            print(f"  [{idx:02d}] {sid}  status={'UNKNOWN':<12}  events={length}")
+            if tail > 0 and length > 0:
+                entries = stream_tail(compose_file, ekey, tail)
+                for line in entries[::-1]:
+                    print(f"      - {line}")
+            idx += 1
         try:
             time.sleep(interval)
         except KeyboardInterrupt:

@@ -70,36 +70,24 @@ class ProtocolInterceptor:
 
     async def handle_outgoing(self, session_id: str, response: JSON, context: t.Optional[dict] = None) -> JSON:
         """Handle a server response before sending to client."""
-        # If this is the initialize response, register the session using server-provided id
+        # If this is the initialize response, register/update the session using server-provided id
         last_method = context.get("_mcp_db_last_method") if isinstance(context, dict) else None
-        # Ensure session exists based on server-provided session id
         existing = await self._sessions.get(session_id) if session_id else None
-        if not existing and session_id:
+        if last_method == "initialize" and session_id:
             init_params = context.get("_mcp_db_init_params") if isinstance(context, dict) else None
-            session = MCPSession(
-                id=session_id,
-                status=SessionStatus.INITIALIZING,
-                client_id=str((init_params or {}).get("clientInfo", {}).get("name", "unknown")),
-                server_id=str(context.get("server_id") if context else "unknown"),
-                capabilities=(init_params or {}).get("capabilities", {}),
-                metadata={"from": "interceptor", "created_fallback": True},
-            )
-            await self._sessions.create(session)
-            await self._append_event(session_id, "SessionCreatedEvent", {"response": response})
-            
-
-        if last_method == "initialize":
-            init_params = context.get("_mcp_db_init_params") if isinstance(context, dict) else None
-            session = MCPSession(
-                id=session_id,
-                status=SessionStatus.INITIALIZING,
-                client_id=str((init_params or {}).get("clientInfo", {}).get("name", "unknown")),
-                server_id=str(context.get("server_id") if context else "unknown"),
-                capabilities=(init_params or {}).get("capabilities", {}),
-                metadata={"from": "interceptor"},
-            )
-            await self._sessions.create(session)
-            await self._append_event(session_id, "SessionCreatedEvent", {"response": response})
+            base = {
+                "status": SessionStatus.INITIALIZED,
+                "client_id": str((init_params or {}).get("clientInfo", {}).get("name", "unknown")),
+                "server_id": str(context.get("server_id") if context else "unknown"),
+                "capabilities": (init_params or {}).get("capabilities", {}),
+                "metadata": {"from": "interceptor"},
+            }
+            if existing is None:
+                session = MCPSession(id=session_id, **base)
+                await self._sessions.create(session)
+                await self._append_event(session_id, "SessionCreatedEvent", {"response": response})
+            else:
+                await self._sessions.update(session_id, base)
             
 
         await self._append_event(session_id, "MessageSentEvent", {"response": response})

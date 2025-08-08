@@ -11,6 +11,10 @@ from .core.asgi_wrapper import ASGITransportWrapper
 from .core.interceptor import ProtocolInterceptor
 from .core.session_manager import SessionManager
 from .core.event_store import EventStore
+from .core.admission import (
+    TransportAdmissionController,
+    StreamableHTTPAdmissionController,
+)
 from .core.models import (
     MCPSession,
     SessionStatus,
@@ -26,6 +30,8 @@ __all__ = [
     "MCPSession",
     "SessionStatus",
     "MCPEvent",
+    "TransportAdmissionController",
+    "StreamableHTTPAdmissionController",
 ]
 
 __version__ = "0.1.0"

@@ -44,6 +44,8 @@ def main(port: int, log_level: str, json_response: bool) -> int:
         level=getattr(logging, log_level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+    # Enable debug logs for wrapper to trace SSE
+    logging.getLogger("mcp_db.core.asgi_wrapper").setLevel(logging.DEBUG)
 
     app = Server("mcp-streamable-http-with-db")
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import json
 import typing as t
 
@@ -40,6 +41,7 @@ class ASGITransportWrapper:
         self._warmed: set[str] = set()
         # Optional injector for fetching session objects without importing storage here
         self._session_lookup = session_lookup
+        self._logger = logging.getLogger(__name__)
 
     def wrap(self, inner_app: t.Callable[[Scope, Receive, Send], t.Awaitable[None]]):
         async def app(scope: Scope, receive: Receive, send: Send) -> None:
@@ -47,6 +49,14 @@ class ASGITransportWrapper:
                 # Pass through non-HTTP scopes untouched (e.g., lifespan)
                 await inner_app(scope, receive, send)
                 return
+
+            try:
+                self._logger.info(
+                    "ASGIWrapper: http request method=%s path=%s",
+                    scope.get("method"), scope.get("path"),
+                )
+            except Exception:
+                pass
 
             # Build headers dict for context
             headers_dict: dict[str, str] = {}
@@ -80,7 +90,9 @@ class ASGITransportWrapper:
             session_id: str | None = None
             if original_body:
                 try:
-                    forwarded = await self._interceptor.handle_incoming(original_body.decode("utf-8"), context=context)
+                    payload_text = original_body.decode("utf-8", errors="ignore")
+                    self._logger.info("ASGIWrapper: incoming body bytes=%d", len(original_body))
+                    forwarded = await self._interceptor.handle_incoming(payload_text, context=context)
                     if "_raw" in forwarded:
                         # Keep raw bytes
                         modified_body_bytes = forwarded["_raw"].encode("utf-8") if isinstance(forwarded["_raw"], str) else forwarded["_raw"]
@@ -90,6 +102,7 @@ class ASGITransportWrapper:
                     session_id = self._interceptor._extract_session_id(forwarded if isinstance(forwarded, dict) else {}, context)
                     if not session_id and context and "_mcp_db_session_id" in context:
                         session_id = t.cast(str, context.get("_mcp_db_session_id"))
+                    self._logger.info("ASGIWrapper: extracted sid from incoming=%s", session_id)
                 except Exception:
                     # On parse/interceptor error, fall back to original body
                     modified_body_bytes = original_body
@@ -102,12 +115,24 @@ class ASGITransportWrapper:
                 except Exception:
                     session_id = None
 
-            # Create a custom receive that replays the modified body once
+            # Create a custom receive that replays the modified body once, then passthrough
+            first_receive_done: bool = False
+
             async def wrapped_receive() -> t.Dict[str, t.Any]:
-                nonlocal modified_body_bytes
-                body = modified_body_bytes
-                modified_body_bytes = b""
-                return {"type": "http.request", "body": body, "more_body": False}
+                nonlocal modified_body_bytes, first_receive_done
+                if not first_receive_done:
+                    first_receive_done = True
+                    body = modified_body_bytes
+                    modified_body_bytes = b""
+                    self._logger.info(
+                        "ASGIWrapper: wrapped_receive -> http.request bytes=%d more=False",
+                        len(body),
+                    )
+                    return {"type": "http.request", "body": body, "more_body": False}
+                # After first request body, forward original receive (disconnect, etc.)
+                msg = await receive()
+                self._logger.debug("ASGIWrapper: passthrough receive type=%s", msg.get("type"))
+                return msg
 
             # Intercept outgoing send calls
             response_headers: list[tuple[bytes, bytes]] | None = None
@@ -128,6 +153,12 @@ class ASGITransportWrapper:
                             # Persist on context for downstream consumers
                             if isinstance(context, dict):
                                 context["_mcp_db_session_id"] = sid
+                        self._logger.info(
+                            "ASGIWrapper: response.start content_type=%s sid=%s headers=%s",
+                            content_type,
+                            session_id,
+                            header_map,
+                        )
                     except Exception:
                         content_type = ""
                     await send(message)
@@ -136,6 +167,10 @@ class ASGITransportWrapper:
                 if message.get("type") == "http.response.body":
                     body: bytes = message.get("body", b"")
                     more = bool(message.get("more_body", False))
+                    self._logger.info(
+                        "ASGIWrapper: response.body bytes=%d more=%s content_type=%s sid=%s",
+                        len(body), more, content_type, session_id,
+                    )
 
                     # JSON mode: try to intercept once when body is complete
                     if content_type and "application/json" in content_type and not more:
@@ -167,6 +202,7 @@ class ASGITransportWrapper:
                                     data = line[5:].strip()
                                     if data:
                                         try:
+                                            self._logger.debug("ASGIWrapper: SSE data line len=%d", len(data))
                                             parsed = json.loads(data)
                                             if session_id:
                                                 await self._interceptor.handle_outgoing(session_id, parsed, context=context)
@@ -200,7 +236,8 @@ class ASGITransportWrapper:
                     except Exception:
                         method = None
 
-                    if method in {"initialize", "initialized", "notifications/initialized"}:
+                    # Skip only for initialize; for initialized/notifications we must admit
+                    if method == "initialize":
                         return
 
                     if not session_id:
@@ -217,6 +254,7 @@ class ASGITransportWrapper:
 
                     # If already present in SDK, nothing to do
                     if self._admission.has_session(session_id_local):
+                        self._logger.info("ASGIWrapper: admission skip; session already present sid=%s", session_id_local)
                         return
 
                     # Consult storage (if provided) to check status and decide warming
@@ -230,19 +268,20 @@ class ASGITransportWrapper:
                     # Reconstruct transport for INITIALIZED/ACTIVE; if unknown, best-effort reconstruct
                     if sess_obj is not None:
                         status = str(sess_obj.get("status", "")).upper()
+                        self._logger.info("ASGIWrapper: admission storage status=%s sid=%s", status, session_id_local)
                         if status in {"INITIALIZED", "ACTIVE"}:
                             await self._admission.ensure_session_transport(session_id_local)
                             # Warm only if ACTIVE and not yet warmed on this node
                             if status == "ACTIVE" and session_id_local not in self._warmed:
+                                self._logger.info("ASGIWrapper: warming ACTIVE session sid=%s", session_id_local)
                                 await self._send_internal_initialized(inner_app, scope, session_id_local)
                                 self._warmed.add(session_id_local)
                         # For INITIALIZING/CLOSED, do nothing here
                     else:
-                        # No record in storage: still reconstruct to let SDK admit; then warm once
+                        # No record in storage: still reconstruct to let SDK admit for initialized/other calls
+                        self._logger.info("ASGIWrapper: admission without storage record; reconstruct sid=%s", session_id_local)
                         await self._admission.ensure_session_transport(session_id_local)
-                        if session_id_local not in self._warmed:
-                            await self._send_internal_initialized(inner_app, scope, session_id_local)
-                            self._warmed.add(session_id_local)
+                        # Do not auto-warm without DB truth
                 except Exception:
                     # Never block request on admission errors
                     pass
@@ -295,6 +334,7 @@ class ASGITransportWrapper:
 
         try:
             await inner_app(warm_scope, warm_receive, warm_send)
+            self._logger.debug("ASGIWrapper: internal initialized sent for sid=%s", session_id)
         except Exception:
             # Do not propagate warming errors
             pass

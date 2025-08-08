@@ -12,7 +12,7 @@ pip install mcp-db
 
 1. Create your MCP server using the MCP SDK (e.g., `StreamableHTTPSessionManager`).
 2. Wrap the ASGI endpoint with `ASGITransportWrapper(interceptor).wrap(asgi_app)`.
-3. Use any `StorageAdapter` (memory, Redis) via `SessionManager` + `EventStore`.
+3. Use any `StorageAdapter` (memory, Redis, custom) via `SessionManager` + `EventStore`.
 
 Example wiring:
 

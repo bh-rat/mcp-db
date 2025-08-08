@@ -3,7 +3,6 @@ from __future__ import annotations
 import typing as t
 
 from .interceptor import ProtocolInterceptor
-from .session_manager import SessionManager
 
 
 JSON = t.Dict[str, t.Any]

@@ -28,6 +28,14 @@ Target maturity for beta: end-to-end resiliency (locks, idempotency), metrics.
 - [ ] SSE correctness and backpressure
   - [ ] Ensure wrapper never interferes with SSE chunking and disconnect semantics
   - [ ] Client examples for both JSON and SHTTP (SSE on POST)
+- [ ] Session Lifecycle Management
+  - [ ] Fix session creation race condition between header processing and body handling
+  - [ ] Implement comprehensive session closure handling (client disconnects, timeouts, DELETE requests)
+  - [ ] Add session expiry/TTL mechanism for abandoned sessions in Redis
+- [ ] Streamable HTTP Compliance
+  - [ ] Ensure proper session state transitions (INITIALIZING → INITIALIZED → ACTIVE → CLOSED) are maintained consistently across distributed nodes
+  - [ ] Ensure session state transitions are atomic and consistent across nodes
+  - [ ] **[IMPORTANT]** Add validation for session state before processing requests - prevent processing requests for sessions in wrong states
 - [ ] Examples
   - [ ] Round-robin LB example (done) – refine and document
   - [ ] Multi-node docker-compose example (2 servers + Redis + LB)
@@ -35,6 +43,13 @@ Target maturity for beta: end-to-end resiliency (locks, idempotency), metrics.
   - [ ] Architecture overview, state diagrams, failure modes
   - [ ] Troubleshooting guide (400s, SSE stalls, header requirements)
 - [ ] Custom MCP transport implementation 
+
+
+### v0.3.0
+- [ ] SDK-compatible EventStore: implement Redis (first) and pass to `StreamableHTTPSessionManager(event_store=...)` for Last-Event-ID replay across instances
+- [ ] Session ownership map: persist `session_id -> instance_id` and add ASGI request forwarding to the owner for all Streamable HTTP requests; instance selection should happen based on this map
+- [ ] Admission concurrency: use storage `acquire_lock` around admission and make `ensure_session_transport` idempotent to prevent duplicate transports
+- [ ] Status policy: return 404 for unknown/expired sessions (configurable)
 
 
 ## Compatibility

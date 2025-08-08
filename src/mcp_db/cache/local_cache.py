@@ -5,10 +5,11 @@ import typing as t
 from collections import OrderedDict
 
 
-class TTLCache:
-    """Simple LRU + TTL cache for per-instance L1.
+class LocalCache:
+    """Simple LRU + TTL cache for per-instance local caching.
 
     No external deps; suitable for small working sets.
+    Provides fast in-memory caching local to each server instance.
     """
 
     def __init__(self, max_size: int = 1000, ttl_seconds: float = 60.0) -> None:
@@ -43,5 +44,3 @@ class TTLCache:
 
     def clear(self) -> None:
         self._store.clear()
-
-

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -64,5 +64,3 @@ class WrapperConfig:
             resilience=build(ResilienceConfig, "resilience"),
             performance=build(PerformanceConfig, "performance"),
         )
-
-

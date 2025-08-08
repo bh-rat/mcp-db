@@ -4,9 +4,8 @@ import json
 import typing as t
 import uuid
 
-from .models import MCPSession, SessionStatus, MCPEvent, BaseEvent
+from .models import BaseEvent, MCPSession, SessionStatus
 from .session_manager import SessionManager
-
 
 JSON = t.Dict[str, t.Any]
 
@@ -88,7 +87,6 @@ class ProtocolInterceptor:
                 await self._append_event(session_id, "SessionCreatedEvent", {"response": response})
             else:
                 await self._sessions.update(session_id, base)
-            
 
         await self._append_event(session_id, "MessageSentEvent", {"response": response})
         if response.get("method") == "server/disconnect":
@@ -118,5 +116,3 @@ class ProtocolInterceptor:
     async def _append_event(self, session_id: str, event_type: str, payload: JSON) -> None:
         event = BaseEvent(event_id=uuid.uuid4().hex, session_id=session_id, event_type=event_type, payload=payload)
         await self._sessions.append_event(event)
-
-

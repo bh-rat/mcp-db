@@ -3,7 +3,7 @@ from __future__ import annotations
 import typing as t
 from abc import ABC, abstractmethod
 
-from ..core.models import MCPSession, MCPEvent
+from mcp_db.core.models import MCPEvent, MCPSession
 
 
 class StorageAdapter(ABC):
@@ -28,7 +28,9 @@ class StorageAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_events(self, session_id: str, after_event_id: t.Optional[str] = None) -> t.AsyncIterator[MCPEvent]:  # pragma: no cover - interface
+    async def get_events(
+        self, session_id: str, after_event_id: t.Optional[str] = None
+    ) -> t.AsyncIterator[MCPEvent]:  # pragma: no cover - interface
         raise NotImplementedError
 
     @abstractmethod
@@ -99,5 +101,3 @@ class InMemoryStorage(StorageAdapter):
 
     async def is_healthy(self) -> bool:
         return True
-
-

@@ -48,8 +48,7 @@ class StreamableHTTPAdmissionController(TransportAdmissionController):
             except Exception:
                 continue
         raise ImportError(
-            "Could not locate StreamableHTTPServerTransport in MCP SDK. "
-            "Checked: " + ", ".join(candidates)
+            "Could not locate StreamableHTTPServerTransport in MCP SDK. Checked: " + ", ".join(candidates)
         )
 
     def has_session(self, session_id: str) -> bool:
@@ -129,10 +128,9 @@ class StreamableHTTPAdmissionController(TransportAdmissionController):
             # If the manager's task group API differs, run fire-and-forget
             try:
                 import anyio
+
                 async with anyio.create_task_group() as tg:
                     await tg.start(_run)
             except Exception:
                 # Last fallback: run inline (potentially blocking)
                 await _run()
-
-

@@ -4,9 +4,9 @@ import json
 import typing as t
 from dataclasses import asdict
 
-from .base import StorageAdapter
-from ..core.models import MCPSession, MCPEvent
+from mcp_db.core.models import MCPEvent, MCPSession
 
+from .base import StorageAdapter
 
 # Prefer redis.asyncio (modern) and fall back to aioredis for compatibility
 _redis_lib: t.Any | None = None
@@ -35,9 +35,7 @@ class RedisStorage(StorageAdapter):
         stream_maxlen: int | None = None,
     ) -> None:
         if _redis_lib is None:  # pragma: no cover
-            raise ImportError(
-                "Redis asyncio client is required. Install with: pip install redis (or aioredis)"
-            )
+            raise ImportError("Redis asyncio client is required. Install with: pip install redis (or aioredis)")
         self._url = url
         self._prefix = prefix.rstrip(":")
         self._stream_maxlen = stream_maxlen
@@ -151,5 +149,3 @@ class RedisStorage(StorageAdapter):
             await self._redis.close()
         except Exception:
             pass
-
-

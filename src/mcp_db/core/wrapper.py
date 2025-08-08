@@ -4,7 +4,6 @@ import typing as t
 
 from .interceptor import ProtocolInterceptor
 
-
 JSON = t.Dict[str, t.Any]
 
 
@@ -36,5 +35,3 @@ class MCPStorageWrapper:
         if session_id:
             response = await self._interceptor.handle_outgoing(session_id, response)
         return response
-
-

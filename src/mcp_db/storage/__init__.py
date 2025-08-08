@@ -1,4 +1,4 @@
-from .base import StorageAdapter, InMemoryStorage
+from .base import InMemoryStorage, StorageAdapter
 
 __all__ = [
     "StorageAdapter",

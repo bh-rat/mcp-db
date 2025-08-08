@@ -42,5 +42,3 @@ class BaseEvent:
 
 
 MCPEvent = BaseEvent
-
-

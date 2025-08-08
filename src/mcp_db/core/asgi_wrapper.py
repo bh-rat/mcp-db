@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
-import logging
 import json
+import logging
 import typing as t
 
-from .interceptor import ProtocolInterceptor
 from .admission import TransportAdmissionController
-
+from .interceptor import ProtocolInterceptor
 
 Scope = t.Dict[str, t.Any]
 Receive = t.Callable[[], t.Awaitable[t.Dict[str, t.Any]]]
@@ -53,7 +51,8 @@ class ASGITransportWrapper:
             try:
                 self._logger.info(
                     "ASGIWrapper: http request method=%s path=%s",
-                    scope.get("method"), scope.get("path"),
+                    scope.get("method"),
+                    scope.get("path"),
                 )
             except Exception:
                 pass
@@ -95,11 +94,17 @@ class ASGITransportWrapper:
                     forwarded = await self._interceptor.handle_incoming(payload_text, context=context)
                     if "_raw" in forwarded:
                         # Keep raw bytes
-                        modified_body_bytes = forwarded["_raw"].encode("utf-8") if isinstance(forwarded["_raw"], str) else forwarded["_raw"]
+                        modified_body_bytes = (
+                            forwarded["_raw"].encode("utf-8")
+                            if isinstance(forwarded["_raw"], str)
+                            else forwarded["_raw"]
+                        )
                     else:
                         modified_body_bytes = json.dumps(forwarded).encode("utf-8")
                     # Best-effort extraction for outgoing interception
-                    session_id = self._interceptor._extract_session_id(forwarded if isinstance(forwarded, dict) else {}, context)
+                    session_id = self._interceptor._extract_session_id(
+                        forwarded if isinstance(forwarded, dict) else {}, context
+                    )
                     if not session_id and context and "_mcp_db_session_id" in context:
                         session_id = t.cast(str, context.get("_mcp_db_session_id"))
                     self._logger.info("ASGIWrapper: extracted sid from incoming=%s", session_id)
@@ -144,7 +149,10 @@ class ASGITransportWrapper:
                     response_headers = message.get("headers") or []
                     # Determine content type if present
                     try:
-                        header_map = {k.lower(): v for k, v in ((k.decode("latin1"), v.decode("latin1")) for k, v in response_headers)}
+                        header_map = {
+                            k.lower(): v
+                            for k, v in ((k.decode("latin1"), v.decode("latin1")) for k, v in response_headers)
+                        }
                         content_type = header_map.get("content-type", "")
                         # Capture server-provided session id as early as possible
                         sid = header_map.get("mcp-session-id") or header_map.get("x-mcp-session-id")
@@ -169,7 +177,10 @@ class ASGITransportWrapper:
                     more = bool(message.get("more_body", False))
                     self._logger.info(
                         "ASGIWrapper: response.body bytes=%d more=%s content_type=%s sid=%s",
-                        len(body), more, content_type, session_id,
+                        len(body),
+                        more,
+                        content_type,
+                        session_id,
                     )
 
                     # JSON mode: try to intercept once when body is complete
@@ -177,7 +188,10 @@ class ASGITransportWrapper:
                         # Capture server-provided session id header on initialize
                         try:
                             if not session_id and response_headers:
-                                header_map = {k.lower(): v for k, v in ((k.decode("latin1"), v.decode("latin1")) for k, v in response_headers)}
+                                header_map = {
+                                    k.lower(): v
+                                    for k, v in ((k.decode("latin1"), v.decode("latin1")) for k, v in response_headers)
+                                }
                                 sid = header_map.get("mcp-session-id") or header_map.get("x-mcp-session-id")
                                 if sid:
                                     session_id = sid
@@ -205,7 +219,9 @@ class ASGITransportWrapper:
                                             self._logger.debug("ASGIWrapper: SSE data line len=%d", len(data))
                                             parsed = json.loads(data)
                                             if session_id:
-                                                await self._interceptor.handle_outgoing(session_id, parsed, context=context)
+                                                await self._interceptor.handle_outgoing(
+                                                    session_id, parsed, context=context
+                                                )
                                         except Exception:
                                             # Ignore non-JSON data lines
                                             pass
@@ -254,7 +270,9 @@ class ASGITransportWrapper:
 
                     # If already present in SDK, nothing to do
                     if self._admission.has_session(session_id_local):
-                        self._logger.info("ASGIWrapper: admission skip; session already present sid=%s", session_id_local)
+                        self._logger.info(
+                            "ASGIWrapper: admission skip; session already present sid=%s", session_id_local
+                        )
                         return
 
                     # Consult storage (if provided) to check status and decide warming
@@ -279,7 +297,9 @@ class ASGITransportWrapper:
                         # For INITIALIZING/CLOSED, do nothing here
                     else:
                         # No record in storage: still reconstruct to let SDK admit for initialized/other calls
-                        self._logger.info("ASGIWrapper: admission without storage record; reconstruct sid=%s", session_id_local)
+                        self._logger.info(
+                            "ASGIWrapper: admission without storage record; reconstruct sid=%s", session_id_local
+                        )
                         await self._admission.ensure_session_transport(session_id_local)
                         # Do not auto-warm without DB truth
                 except Exception:
@@ -338,5 +358,3 @@ class ASGITransportWrapper:
         except Exception:
             # Do not propagate warming errors
             pass
-
-

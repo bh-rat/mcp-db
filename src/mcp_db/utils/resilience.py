@@ -3,8 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from typing import Awaitable, Callable, Iterable, TypeVar, Optional, List
-
+from typing import Awaitable, Callable, Iterable, List, Optional, TypeVar
 
 T = TypeVar("T")
 
@@ -81,5 +80,3 @@ async def with_retries(
             await asyncio.sleep(delay_ms / 1000.0)
     assert last_exc is not None
     raise last_exc
-
-

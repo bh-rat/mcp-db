@@ -37,6 +37,17 @@ redis = [
   "redis>=5.0.0; python_version >= '3.10'",
   "aioredis>=2.0.1; python_version < '3.11'",
 ]
+test = [
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+]
+dev = [
+  "pytest>=7.0.0",
+  "pytest-asyncio>=0.21.0",
+  "pytest-cov>=4.0.0",
+  "ruff>=0.1.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/bh-rat/mcp-db"
@@ -86,3 +97,8 @@ minversion = "6.0"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = ["-ra", "--strict-markers", "--disable-warnings", "-v"]
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+    "requires_redis: marks tests that require Redis to be running",
+    "slow: marks tests as slow running",
+]

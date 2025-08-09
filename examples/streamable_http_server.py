@@ -3,7 +3,6 @@
 import contextlib
 import logging
 from collections.abc import AsyncIterator
-from typing import Optional
 
 import anyio
 import click
@@ -15,13 +14,12 @@ from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.types import Receive, Scope, Send
 
-from mcp_db.core.event_store import EventStore as DbEventStore
-from mcp_db.core.session_manager import SessionManager as DbSessionManager
-from mcp_db.core.interceptor import ProtocolInterceptor
-from mcp_db.core.asgi_wrapper import ASGITransportWrapper
 from mcp_db.core.admission import StreamableHTTPAdmissionController
+from mcp_db.core.asgi_wrapper import ASGITransportWrapper
+from mcp_db.core.event_store import EventStore as DbEventStore
+from mcp_db.core.interceptor import ProtocolInterceptor
+from mcp_db.core.session_manager import SessionManager as DbSessionManager
 from mcp_db.storage.redis_adapter import RedisStorage
-
 
 logger = logging.getLogger(__name__)
 
@@ -56,9 +54,7 @@ def main(port: int, log_level: str, json_response: bool) -> int:
         caller = arguments.get("caller", "unknown")
 
         for i in range(count):
-            notification_msg = (
-                f"[{i + 1}/{count}] Event from '{caller}' - Use Last-Event-ID to resume if disconnected"
-            )
+            notification_msg = f"[{i + 1}/{count}] Event from '{caller}' - Use Last-Event-ID to resume if disconnected"
             await app.request_context.session.send_log_message(
                 level="info",
                 data=notification_msg,
@@ -72,9 +68,7 @@ def main(port: int, log_level: str, json_response: bool) -> int:
         return [
             types.TextContent(
                 type="text",
-                text=(
-                    f"Sent {count} notifications with {interval}s interval for caller: {caller}"
-                ),
+                text=(f"Sent {count} notifications with {interval}s interval for caller: {caller}"),
             )
         ]
 
@@ -83,9 +77,7 @@ def main(port: int, log_level: str, json_response: bool) -> int:
         return [
             types.Tool(
                 name="start-notification-stream",
-                description=(
-                    "Sends a stream of notifications with configurable count and interval"
-                ),
+                description=("Sends a stream of notifications with configurable count and interval"),
                 inputSchema={
                     "type": "object",
                     "required": ["interval", "count", "caller"],
@@ -100,9 +92,7 @@ def main(port: int, log_level: str, json_response: bool) -> int:
                         },
                         "caller": {
                             "type": "string",
-                            "description": (
-                                "Identifier of the caller to include in notifications"
-                            ),
+                            "description": ("Identifier of the caller to include in notifications"),
                         },
                     },
                 },
@@ -140,14 +130,18 @@ def main(port: int, log_level: str, json_response: bool) -> int:
     # Helper to let wrapper consult storage without importing adapters
     async def lookup_session(session_id: str):
         sess = await db_sessions.get(session_id)
-        return None if sess is None else {
-            "id": sess.id,
-            "status": getattr(sess.status, "value", str(sess.status)),
-            "client_id": sess.client_id,
-            "server_id": sess.server_id,
-            "capabilities": sess.capabilities,
-            "metadata": sess.metadata,
-        }
+        return (
+            None
+            if sess is None
+            else {
+                "id": sess.id,
+                "status": getattr(sess.status, "value", str(sess.status)),
+                "client_id": sess.client_id,
+                "server_id": sess.server_id,
+                "capabilities": sess.capabilities,
+                "metadata": sess.metadata,
+            }
+        )
 
     # Wrap the ASGI transport for the mounted MCP endpoint
     wrapped_mcp_asgi = ASGITransportWrapper(
@@ -170,5 +164,3 @@ def main(port: int, log_level: str, json_response: bool) -> int:
 
 if __name__ == "__main__":
     main()
-
-

@@ -289,9 +289,11 @@ class ASGITransportWrapper:
                         self._logger.info("ASGIWrapper: admission storage status=%s sid=%s", status, session_id_local)
                         if status in {"INITIALIZED", "ACTIVE"}:
                             await self._admission.ensure_session_transport(session_id_local)
-                            # Warm only if ACTIVE and not yet warmed on this node
-                            if status == "ACTIVE" and session_id_local not in self._warmed:
-                                self._logger.info("ASGIWrapper: warming ACTIVE session sid=%s", session_id_local)
+                            # Warm when not yet warmed on this node (idempotent)
+                            if session_id_local not in self._warmed:
+                                self._logger.info(
+                                    "ASGIWrapper: warming session sid=%s status=%s", session_id_local, status
+                                )
                                 await self._send_internal_initialized(inner_app, scope, session_id_local)
                                 self._warmed.add(session_id_local)
                         # For INITIALIZING/CLOSED, do nothing here
@@ -329,10 +331,25 @@ class ASGITransportWrapper:
             headers_list = list(scope.get("headers", []))
         except Exception:
             headers_list = []
-        # Ensure mcp-session-id header present
+        # Ensure mcp-session-id header present (add common casings for safety)
         headers_lower = {k.decode("latin1").lower(): v for k, v in headers_list}
         if "mcp-session-id" not in headers_lower and "x-mcp-session-id" not in headers_lower:
-            headers_list.append((b"mcp-session-id", session_id.encode("latin1")))
+            sid_bytes = session_id.encode("latin1")
+            headers_list.append((b"mcp-session-id", sid_bytes))
+            headers_list.append((b"Mcp-Session-Id", sid_bytes))
+
+        # Ensure JSON content negotiation headers for internal POST
+        if "content-type" not in headers_lower:
+            headers_list.append((b"content-type", b"application/json"))
+        if "accept" not in headers_lower:
+            headers_list.append((b"accept", b"application/json, text/event-stream"))
+        # Ensure protocol version header casing exists
+        if "mcp-protocol-version" in headers_lower and b"MCP-Protocol-Version" not in dict(headers_list):
+            try:
+                pv = headers_lower["mcp-protocol-version"].encode("latin1")
+                headers_list.append((b"MCP-Protocol-Version", pv))
+            except Exception:
+                pass
 
         warm_scope = dict(scope)
         warm_scope["headers"] = headers_list

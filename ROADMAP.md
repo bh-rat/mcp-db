@@ -42,11 +42,30 @@ Target maturity for beta: end-to-end resiliency (locks, idempotency), metrics.
 - [ ] Documentation
   - [ ] Architecture overview, state diagrams, failure modes
   - [ ] Troubleshooting guide (400s, SSE stalls, header requirements)
+- [ ] Testing Infrastructure
+  - [ ] Integration test suite for distributed scenarios
+  - [ ] Test harness for multi-node session migration
+  - [ ] Automated tests for crash recovery scenarios
+  - [ ] Load testing framework for concurrent access patterns
 - [ ] Custom MCP transport implementation 
 
 
-### v0.3.0
-- [ ] SDK-compatible EventStore: implement Redis (first) and pass to `StreamableHTTPSessionManager(event_store=...)` for Last-Event-ID replay across instances
+### v0.3.0 – Advanced Distribution Features
+
+- [ ] **SDK-compatible EventStore** (Required for SSE resumability tests)
+  - [ ] Implement Redis-backed EventStore compatible with `StreamableHTTPSessionManager(event_store=...)`
+  - [ ] Support Last-Event-ID replay across instances for SSE stream resumption
+  - [ ] Per-stream cursor management (not global replay)
+  - [ ] Event ID generation and tracking in wrapper
+- [ ] **Session Termination Handling**
+  - [ ] Support HTTP DELETE for client-initiated termination
+  - [ ] Detect and propagate server-initiated termination (monitor 404 responses)
+  - [ ] Clean up terminated sessions from storage
+  - [ ] Return proper 404 for terminated sessions across all nodes
+- [ ] **Concurrent Access Control**
+  - [ ] Implement optimistic concurrency control for session updates
+  - [ ] Add distributed locking for critical session state changes
+  - [ ] Ensure consistency during concurrent rehydration from multiple nodes
 - [ ] Session ownership map: persist `session_id -> instance_id` and add ASGI request forwarding to the owner for all Streamable HTTP requests; instance selection should happen based on this map
 - [ ] Admission concurrency: use storage `acquire_lock` around admission and make `ensure_session_transport` idempotent to prevent duplicate transports
 - [ ] Status policy: return 404 for unknown/expired sessions (configurable)

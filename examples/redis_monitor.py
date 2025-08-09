@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 
 import json
-import os
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -182,5 +180,3 @@ def main(compose_file: str, prefix: str, interval: float, tail: int, clear: Opti
 
 if __name__ == "__main__":
     main()
-
-

@@ -8,7 +8,9 @@ import click
 import httpx
 
 
-async def shttp_post(client: httpx.AsyncClient, url: str, payload: dict, *, headers: dict | None = None) -> Tuple[str | None, Any | None]:
+async def shttp_post(
+    client: httpx.AsyncClient, url: str, payload: dict, *, headers: dict | None = None
+) -> Tuple[str | None, Any | None]:
     async with client.stream("POST", url, json=payload, headers=headers) as r:
         r.raise_for_status()
         sid = r.headers.get("Mcp-Session-Id") or r.headers.get("mcp-session-id")
@@ -106,6 +108,3 @@ async def main(base: str, shttp: bool) -> None:
 if __name__ == "__main__":
     # click supports asyncio entrypoints via 'python -m' invocation in uv
     asyncio.run(main(standalone_mode=False))
-
-
-

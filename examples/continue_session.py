@@ -2,14 +2,15 @@
 
 import asyncio
 import json
-import sys
 from typing import Any, Tuple
 
 import click
 import httpx
 
 
-async def shttp_post(client: httpx.AsyncClient, url: str, payload: dict, *, headers: dict | None = None) -> Tuple[Any | None, int]:
+async def shttp_post(
+    client: httpx.AsyncClient, url: str, payload: dict, *, headers: dict | None = None
+) -> Tuple[Any | None, int]:
     async with client.stream("POST", url, json=payload, headers=headers) as r:
         r.raise_for_status()
         event_obj = None
@@ -71,5 +72,3 @@ async def main(session_id: str, base: str, shttp: bool) -> None:
 
 if __name__ == "__main__":
     asyncio.run(main(standalone_mode=False))
-
-

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import AsyncIterator
 
@@ -13,7 +12,6 @@ from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 from starlette.routing import Route
-
 
 logger = logging.getLogger(__name__)
 
@@ -116,10 +114,18 @@ async def proxy_handler(request: Request) -> StreamingResponse:
 
 @click.command()
 @click.option("--listen-port", default=3000, help="Port for the LB to listen on")
-@click.option("--backend", multiple=True, default=["http://127.0.0.1:3001", "http://127.0.0.1:3002"], help="Backend base URLs (at least two)")
+@click.option(
+    "--backend",
+    multiple=True,
+    default=["http://127.0.0.1:3001", "http://127.0.0.1:3002"],
+    help="Backend base URLs (at least two)",
+)
 @click.option("--log-level", default="INFO", help="Logging level")
 def main(listen_port: int, backend: list[str], log_level: str) -> int:
-    logging.basicConfig(level=getattr(logging, log_level.upper()), format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
     rr = RoundRobin(list(backend))
 
@@ -142,5 +148,3 @@ def main(listen_port: int, backend: list[str], log_level: str) -> int:
 
 if __name__ == "__main__":
     main()
-
-

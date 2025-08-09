@@ -22,9 +22,7 @@ class RedisEventStore(EventStore):
         return f"{self._prefix}:event_index"
 
     async def store_event(self, stream_id: StreamId, message: JSONRPCMessage) -> EventId:
-        message_dict = (
-            message.model_dump(by_alias=True, exclude_none=True) if hasattr(message, "model_dump") else dict(message)
-        )  # type: ignore
+        message_dict = message.model_dump(by_alias=True, exclude_none=True)
         payload = json.dumps(message_dict)
         ts = int(time.time() * 1000)
         fields = {"message": payload, "ts": str(ts)}
@@ -44,11 +42,7 @@ class RedisEventStore(EventStore):
             payload = data.get(b"message") if isinstance(data, dict) else data["message"]
             msg_json = payload.decode() if isinstance(payload, (bytes, bytearray)) else payload
             msg_dict = json.loads(msg_json)
-            message = (
-                JSONRPCMessage.model_validate(msg_dict)
-                if hasattr(JSONRPCMessage, "model_validate")
-                else JSONRPCMessage(**msg_dict)
-            )  # type: ignore
+            message = JSONRPCMessage.model_validate(msg_dict)
             await send_callback(
                 EventMessage(message, eid.decode() if isinstance(eid, (bytes, bytearray)) else str(eid))
             )

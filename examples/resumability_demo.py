@@ -4,13 +4,12 @@ import json
 from typing import AsyncIterator
 
 import anyio
+from mcp.types import JSONRPCMessage
 from starlette.applications import Starlette
-from starlette.responses import StreamingResponse, JSONResponse, PlainTextResponse
+from starlette.responses import JSONResponse, PlainTextResponse, StreamingResponse
 from starlette.routing import Route
 
-from mcp.types import JSONRPCMessage
 from mcp_db.event.inmemory import InMemoryEventStore
-
 
 # Simple SSE demo using EventStore to assign per-stream event IDs and support
 # Last-Event-ID based resumability. This is not a full MCP server; it focuses
@@ -29,7 +28,12 @@ async def sse(request):
             send, recv = anyio.create_memory_object_stream[str](50)
 
             async def _enqueue(ev):
-                await send.send(f"id: {ev.event_id}\ndata: {json.dumps(ev.message.model_dump(by_alias=True))}\n\n")
+                try:
+                    data = json.dumps(ev.message.model_dump(by_alias=True))
+                    await send.send(f"id: {ev.event_id}\ndata: {data}\n\n")
+                except Exception:
+                    # Skip events that fail to serialize
+                    pass
 
             await event_store.replay_events_after(last_event_id, _enqueue)
             await send.aclose()
@@ -63,8 +67,10 @@ async def publish(request):
     live_send = getattr(request.app.state, "live_sse_send", None)
     if live_send is not None:
         try:
-            await live_send.send(f"id: {eid}\ndata: {json.dumps(message.model_dump(by_alias=True))}\n\n")
+            data = json.dumps(message.model_dump(by_alias=True))
+            await live_send.send(f"id: {eid}\ndata: {data}\n\n")
         except Exception:
+            # Connection might be closed, ignore
             pass
 
     return JSONResponse({"stored_event_id": eid})

@@ -11,7 +11,6 @@ from .core.admission import (
     TransportAdmissionController,
 )
 from .core.asgi_wrapper import ASGITransportWrapper
-from .core.event_store import EventStore
 from .core.interceptor import ProtocolInterceptor
 from .core.models import (
     MCPEvent,
@@ -20,6 +19,19 @@ from .core.models import (
 )
 from .core.session_manager import SessionManager
 from .core.wrapper import MCPStorageWrapper
+from .event import (
+    EventCallback,
+    EventId,
+    EventMessage,
+    EventStore,
+    InMemoryEventStore,
+    RedisEventStore,
+    StreamId,
+)
+from .session import (
+    InMemoryStorage,
+    StorageAdapter,
+)
 
 __all__ = [
     "MCPStorageWrapper",
@@ -27,6 +39,14 @@ __all__ = [
     "ProtocolInterceptor",
     "SessionManager",
     "EventStore",
+    "EventId",
+    "StreamId",
+    "EventMessage",
+    "EventCallback",
+    "InMemoryEventStore",
+    "RedisEventStore",
+    "StorageAdapter",
+    "InMemoryStorage",
     "MCPSession",
     "SessionStatus",
     "MCPEvent",

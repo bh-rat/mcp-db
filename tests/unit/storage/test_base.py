@@ -3,7 +3,7 @@
 import pytest
 
 from mcp_db.core.models import BaseEvent, MCPSession, SessionStatus
-from mcp_db.storage.base import InMemoryStorage, StorageAdapter
+from mcp_db.session.base import InMemoryStorage, StorageAdapter
 
 
 class TestStorageAdapterInterface:

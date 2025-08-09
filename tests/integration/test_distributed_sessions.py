@@ -18,11 +18,10 @@ from starlette.types import Receive, Scope, Send
 
 from mcp_db.core.admission import StreamableHTTPAdmissionController
 from mcp_db.core.asgi_wrapper import ASGITransportWrapper
-from mcp_db.core.event_store import EventStore as DbEventStore
 from mcp_db.core.interceptor import ProtocolInterceptor
-from mcp_db.core.session_manager import SessionManager as DbSessionManager
-from mcp_db.storage import InMemoryStorage
-from mcp_db.storage.redis_adapter import RedisStorage
+from mcp_db.core.session_manager import SessionManager
+from mcp_db.session import InMemoryStorage
+from mcp_db.session.redis_adapter import RedisStorage
 
 
 class MockMCPServer:
@@ -62,9 +61,8 @@ class MockMCPServer:
             json_response=json_response,
         )
 
-        # Create mcp-db components
-        db_event_store = DbEventStore(self.storage)
-        db_sessions = DbSessionManager(storage=self.storage, event_store=db_event_store)
+        # Create mcp-db components (session persistence only; SDK handles event store)
+        db_sessions = SessionManager(storage=self.storage, event_store=None)
         interceptor = ProtocolInterceptor(db_sessions)
         admission = StreamableHTTPAdmissionController(manager=self.session_manager, app=self.app)
 

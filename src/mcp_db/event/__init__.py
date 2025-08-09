@@ -1,7 +1,7 @@
-from mcp.server.streamable_http import EventCallback, EventId, EventMessage, EventStore, StreamId
-
+from .base import EventStore
 from .inmemory import InMemoryEventStore
 from .redis import RedisEventStore
+from .types import EventCallback, EventId, EventMessage, JSONRPCMessage, StreamId
 
 __all__ = [
     "EventId",
@@ -11,4 +11,5 @@ __all__ = [
     "EventStore",
     "InMemoryEventStore",
     "RedisEventStore",
+    "JSONRPCMessage",
 ]

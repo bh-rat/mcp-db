@@ -42,19 +42,18 @@ pip install mcp-db
 2) Wire the wrapper with storage-backed `SessionManager` + `EventStore`:
 
 ```python
-from mcp_db.event import EventStore as DbEventStore
-from mcp_db.core.session_manager import SessionManager as DbSessionManager
+from mcp_db.core.session_manager import SessionManager
 from mcp_db.core.interceptor import ProtocolInterceptor
 from mcp_db.core.asgi_wrapper import ASGITransportWrapper
 from mcp_db.core.admission import StreamableHTTPAdmissionController
 from mcp_db.session import RedisStorage
 
-# MCP SDK manager (from your app): session_manager
+# Assume you have MCP SDK session_manager from your app
 
+# Setup mcp-db components
 storage = RedisStorage(url="redis://localhost:6379/0", prefix="mcp")
-db_event_store = DbEventStore(storage)
-db_sessions = DbSessionManager(storage=storage, event_store=db_event_store)
-interceptor = ProtocolInterceptor(db_sessions)
+db_session_manager = SessionManager(storage=storage, event_store=None)
+interceptor = ProtocolInterceptor(db_session_manager)
 admission = StreamableHTTPAdmissionController(manager=session_manager, app=app)
 
 async def handle_streamable_http(scope, receive, send):
@@ -63,7 +62,7 @@ async def handle_streamable_http(scope, receive, send):
 wrapped_asgi = ASGITransportWrapper(
     interceptor,
     admission_controller=admission,
-    session_lookup=db_sessions.get,  # optional: lets the wrapper consult storage
+    session_lookup=db_session_manager.get,  # optional: lets the wrapper consult storage
 ).wrap(handle_streamable_http)
 ```
 

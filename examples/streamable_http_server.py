@@ -16,10 +16,10 @@ from starlette.types import Receive, Scope, Send
 
 from mcp_db.core.admission import StreamableHTTPAdmissionController
 from mcp_db.core.asgi_wrapper import ASGITransportWrapper
-from mcp_db.event.inmemory import InMemoryEventStore as DbEventStore
+from mcp_db.event.inmemory import InMemoryEventStore
 from mcp_db.event.redis import RedisEventStore
 from mcp_db.core.interceptor import ProtocolInterceptor
-from mcp_db.core.session_manager import SessionManager as DbSessionManager
+from mcp_db.core.session_manager import SessionManager
 from mcp_db.session.redis_adapter import RedisStorage
 
 logger = logging.getLogger(__name__)
@@ -138,7 +138,7 @@ def main(port: int, log_level: str, json_response: bool, event_store: str, redis
 
     # Streamable HTTP session manager from MCP SDK
     selected_event_store = (
-        DbEventStore() if event_store.lower() == "memory" else RedisEventStore(url=redis_url, prefix=redis_prefix)
+        InMemoryEventStore() if event_store.lower() == "memory" else RedisEventStore(url=redis_url, prefix=redis_prefix)
     )
     session_manager = StreamableHTTPSessionManager(
         app=app, event_store=selected_event_store, json_response=json_response
@@ -158,7 +158,7 @@ def main(port: int, log_level: str, json_response: bool, event_store: str, redis
 
     # mcp-db storage wrapper components (transport-level only; handlers remain unaware)
     storage = RedisStorage(url="redis://localhost:6379/0", prefix="mcp")
-    db_sessions = DbSessionManager(storage=storage, event_store=None)
+    db_sessions = SessionManager(storage=storage, event_store=None)
     interceptor = ProtocolInterceptor(db_sessions)
 
     # Admission controller for the SDK manager

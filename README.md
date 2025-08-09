@@ -99,7 +99,7 @@ How it works:
 - Subsequent requests on any node: wrapper reconstructs the SDK transport for that session ID before the SDK checks its in-memory map. For ACTIVE sessions, the wrapper can warm the node once.
 
 
-### Limitations (concise)
+### Limitations
 
 - GET/SSE is per-node: live streams/queues exist only on the node that accepted GET; cross-node POSTs can 400/409 without ownership or replay.
 - Persistence ≠ live streams: storing sessions/events doesn’t recreate anyio streams; use ownership routing or reconnect+`Last-Event-ID` replay.

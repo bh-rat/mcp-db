@@ -4,6 +4,8 @@ Distributed session coordination for Model Context Protocol (MCP) servers. It in
 
 Status: alpha (APIs may change before 1.0)
 
+
+
 ### Features
 - Transport-level interception (ASGI) — no handler changes
 - Persistent sessions (uses server-provided `Mcp-Session-Id`) + event sourcing
@@ -15,19 +17,15 @@ Status: alpha (APIs may change before 1.0)
 ### Use Cases
 
 - **Persistent Session Storage**: Store MCP sessions and event streams in Redis or other backends. Sessions survive server restarts and can be queried for state reconstruction.
-
 - **High Availability**: Eliminate single points of failure with automatic session failover. When servers crash or restart, other nodes seamlessly take over active sessions.
-
 - **Zero-Downtime Deployments**: Perform rolling updates and blue-green deployments while preserving session continuity. New instances immediately serve existing sessions from Redis.
-
 - **Horizontal Scaling**: Run MCP servers behind load balancers without sticky sessions. Any server instance can handle any request for existing sessions.
-
 - **Audit & Compliance**: Capture complete session history through event sourcing. Every protocol message is persisted for debugging, monitoring, and regulatory compliance.
 
 ### Requirements
 - Python >= 3.10
 - MCP SDK 1.12.x
-- Redis >= 7 (for streams)
+- Redis >= 7 (will be moved to optional module dependency)
 
 ### Install
 
@@ -42,8 +40,8 @@ pip install mcp-db
 2) Wire the wrapper with storage-backed `SessionManager` + `EventStore`:
 
 ```python
-from mcp_db.core.event_store import EventStore as DbEventStore
-from mcp_db.core.session_manager import SessionManager as DbSessionManager
+from mcp_db.core.event_store import EventStore as RedisEventStore
+from mcp_db.core.session_manager import SessionManager as RedisSessionManager
 from mcp_db.core.interceptor import ProtocolInterceptor
 from mcp_db.core.asgi_wrapper import ASGITransportWrapper
 from mcp_db.core.admission import StreamableHTTPAdmissionController
@@ -52,18 +50,18 @@ from mcp_db.storage import RedisStorage
 # MCP SDK manager (from your app): session_manager
 
 storage = RedisStorage(url="redis://localhost:6379/0", prefix="mcp")
-db_event_store = DbEventStore(storage)
-db_sessions = DbSessionManager(storage=storage, event_store=db_event_store)
-interceptor = ProtocolInterceptor(db_sessions)
-admission = StreamableHTTPAdmissionController(manager=session_manager, app=app)
+event_store = RedisEventStore(storage)
+redis_session_manager = RedisSessionManager(storage=storage, event_store=event_store)
+interceptor = ProtocolInterceptor(redis_session_manager)
+admission = StreamableHTTPAdmissionController(manager=session_manager, app=app) # mcp's session_manager
 
 async def handle_streamable_http(scope, receive, send):
-    await session_manager.handle_request(scope, receive, send)
+    await session_manager.handle_request(scope, receive, send) # mcp's session_manager
 
 wrapped_asgi = ASGITransportWrapper(
     interceptor,
     admission_controller=admission,
-    session_lookup=db_sessions.get,  # optional: lets the wrapper consult storage
+    session_lookup=redis_session_manager.get,  # optional: lets the wrapper consult storage
 ).wrap(handle_streamable_http)
 ```
 
@@ -108,7 +106,7 @@ How it works:
 - Current examples: admission/warm helps POSTs, but GET stream rehydration and SDK `event_store` wiring for replay are still pending.
 
 Planned
-- Ownership routing example; SDK EventStore wiring; explore `mcp_db.transport` for enhanced cross-node continuity.
+- session ownership based routing example; SDK EventStore wiring; need to explore `mcp_db.transport` for enhanced cross-node continuity.
 
 
 ### Notes & tips
@@ -119,4 +117,3 @@ Planned
 
 ### License
 Apache-2.0
-

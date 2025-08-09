@@ -104,6 +104,23 @@ async def main(base: str, shttp: bool) -> None:
             r3 = await client.post(base, json=call, headers={**default_headers, **headers})
             print("tools/call:", r3.json())
 
+        # Optional: trigger GET-stream broadcast
+        call_get_stream = {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {
+                "name": "start-get-stream-broadcast",
+                "arguments": {"interval": 0.25, "count": 3, "text": "hello"},
+            },
+        }
+        if shttp:
+            _, ev2 = await shttp_post(client, base, call_get_stream, headers=headers)
+            print("tools/call GET-broadcast (shttp):", ev2)
+        else:
+            r4 = await client.post(base, json=call_get_stream, headers={**default_headers, **headers})
+            print("tools/call GET-broadcast:", r4.json())
+
 
 if __name__ == "__main__":
     # click supports asyncio entrypoints via 'python -m' invocation in uv

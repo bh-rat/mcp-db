@@ -79,21 +79,12 @@ class TestSessionManager:
         # Verify storage deletion
         mock_storage.delete_session.assert_called_once_with("to-delete")
 
-    async def test_append_event(self, mock_storage, mock_event_store):
-        """Test appending an event to a session."""
+    async def test_append_event_noop(self, mock_storage, mock_event_store):
+        """Append event is a no-op in SessionManager (handled by SDK transports)."""
         manager = SessionManager(storage=mock_storage, event_store=mock_event_store)
-
-        event = BaseEvent(
-            event_id="evt-123",
-            session_id="sess-456",
-            event_type="CustomEvent",
-            payload={"test": "data"},
-        )
-
+        event = BaseEvent(event_id="evt-123", session_id="sess-456", event_type="CustomEvent", payload={"test": "data"})
         await manager.append_event(event)
-
-        # Should delegate to event store
-        mock_event_store.append.assert_called_once_with(event)
+        mock_event_store.append.assert_not_called()
 
     async def test_status_transition_validation(self, mock_storage, mock_event_store):
         """Test session status transition validation."""

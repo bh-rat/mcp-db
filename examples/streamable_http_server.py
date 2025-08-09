@@ -16,10 +16,11 @@ from starlette.types import Receive, Scope, Send
 
 from mcp_db.core.admission import StreamableHTTPAdmissionController
 from mcp_db.core.asgi_wrapper import ASGITransportWrapper
-from mcp_db.core.event_store import EventStore as DbEventStore
+from mcp_db.event.inmemory import InMemoryEventStore as DbEventStore
+from mcp_db.event.redis import RedisEventStore
 from mcp_db.core.interceptor import ProtocolInterceptor
 from mcp_db.core.session_manager import SessionManager as DbSessionManager
-from mcp_db.storage.redis_adapter import RedisStorage
+from mcp_db.session.redis_adapter import RedisStorage
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +38,15 @@ logger = logging.getLogger(__name__)
     default=False,
     help="Enable JSON responses instead of SSE streams",
 )
-def main(port: int, log_level: str, json_response: bool) -> int:
+@click.option(
+    "--event-store",
+    type=click.Choice(["memory", "redis"], case_sensitive=False),
+    default="memory",
+    help="Event store to use for resumability",
+)
+@click.option("--redis-url", default="redis://localhost:6379/0", help="Redis URL for RedisEventStore")
+@click.option("--redis-prefix", default="mcp", help="Redis key prefix for RedisEventStore")
+def main(port: int, log_level: str, json_response: bool, event_store: str, redis_url: str, redis_prefix: str) -> int:
     logging.basicConfig(
         level=getattr(logging, log_level.upper()),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -65,6 +74,19 @@ def main(port: int, log_level: str, json_response: bool) -> int:
                 await anyio.sleep(interval)
 
         await app.request_context.session.send_resource_updated(uri=AnyUrl("http:///test_resource"))
+
+        # Optional: broadcast on GET stream for resumability demo
+        if name == "start-get-stream-broadcast":
+            text = arguments.get("text", "demo")
+            for i in range(count):
+                await app.request_context.session.send_log_message(
+                    level="info",
+                    data=f"[GET stream] {text} #{i + 1}",
+                    logger="get_stream",
+                )
+                if i < count - 1:
+                    await anyio.sleep(interval)
+
         return [
             types.TextContent(
                 type="text",
@@ -96,14 +118,30 @@ def main(port: int, log_level: str, json_response: bool) -> int:
                         },
                     },
                 },
-            )
+            ),
+            types.Tool(
+                name="start-get-stream-broadcast",
+                description=(
+                    "Emits notifications on the GET SSE stream (not tied to a request) to demo Last-Event-ID replay"
+                ),
+                inputSchema={
+                    "type": "object",
+                    "required": ["interval", "count", "text"],
+                    "properties": {
+                        "interval": {"type": "number", "description": "Interval between notifications in seconds"},
+                        "count": {"type": "number", "description": "Number of notifications to send"},
+                        "text": {"type": "string", "description": "Message base text"},
+                    },
+                },
+            ),
         ]
 
     # Streamable HTTP session manager from MCP SDK
+    selected_event_store = (
+        DbEventStore() if event_store.lower() == "memory" else RedisEventStore(url=redis_url, prefix=redis_prefix)
+    )
     session_manager = StreamableHTTPSessionManager(
-        app=app,
-        event_store=None,  # For resumability, plug in the SDK's InMemoryEventStore or a persistent one
-        json_response=json_response,
+        app=app, event_store=selected_event_store, json_response=json_response
     )
 
     async def handle_streamable_http(scope: Scope, receive: Receive, send: Send) -> None:
@@ -120,8 +158,7 @@ def main(port: int, log_level: str, json_response: bool) -> int:
 
     # mcp-db storage wrapper components (transport-level only; handlers remain unaware)
     storage = RedisStorage(url="redis://localhost:6379/0", prefix="mcp")
-    db_event_store = DbEventStore(storage)
-    db_sessions = DbSessionManager(storage=storage, event_store=db_event_store)
+    db_sessions = DbSessionManager(storage=storage, event_store=None)
     interceptor = ProtocolInterceptor(db_sessions)
 
     # Admission controller for the SDK manager

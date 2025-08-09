@@ -3,10 +3,10 @@ from __future__ import annotations
 import typing as t
 
 from mcp_db.cache.local_cache import LocalCache
-from mcp_db.storage import StorageAdapter
+from mcp_db.event.base import EventStore
+from mcp_db.session import StorageAdapter
 from mcp_db.utils.resilience import CircuitBreaker, CircuitBreakerConfig, with_retries
 
-from .event_store import EventStore
 from .models import MCPEvent, MCPSession
 
 
@@ -16,7 +16,7 @@ class SessionManager:
     def __init__(
         self,
         storage: StorageAdapter,
-        event_store: EventStore,
+        event_store: t.Optional[EventStore],
         use_local_cache: bool = True,
         local_cache: t.Optional[LocalCache] = None,
         circuit_breaker: t.Optional[CircuitBreaker] = None,
@@ -76,10 +76,8 @@ class SessionManager:
             self._cache.delete(session_id)
 
     async def append_event(self, event: MCPEvent) -> None:
-        async def _op() -> None:
-            await self._event_store.append(event)
-
-        await self._breaker.run(lambda: with_retries(_op, self._retry_attempts, self._retry_backoff_ms))
+        # No backward-compat event appending here; event replay handled by SDK EventStore in transports
+        return
 
     async def recover(self, session_id: str) -> t.Optional[MCPSession]:
         """Reconstruct session state from events if not present in storage.
@@ -91,6 +89,5 @@ class SessionManager:
         if session is not None:
             return session
         # Attempt event-based recovery (placeholder for now)
-        async for _ in self._event_store.stream(session_id):
-            pass
+        # Legacy event-based recovery removed; rely on persisted sessions
         return await self.get(session_id)

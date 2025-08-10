@@ -125,3 +125,4 @@ async def main(base: str, shttp: bool) -> None:
 if __name__ == "__main__":
     # click supports asyncio entrypoints via 'python -m' invocation in uv
     asyncio.run(main(standalone_mode=False))
+

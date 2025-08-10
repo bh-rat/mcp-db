@@ -1,8 +1,14 @@
-## mcp-db
+# mcp-db - session and event storage implementations for MCP servers
+
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python Version](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
+![Project Status: Experimental](https://img.shields.io/badge/status-experimental-red)
+
+> ⚠️ **Experimental Library**: This project is in an experimental phase and is not yet published to PyPI. To use it, you'll need to install directly from the source.
+
+---
 
 Distributed session coordination for Model Context Protocol (MCP) servers. It intercepts MCP Streamable HTTP traffic (JSON + SSE), persists sessions and events, and enables cross-node admission/warming so any node can serve any existing session behind a load balancer.
-
-Status: alpha (APIs may change before 1.0)
 
 ### Features
 - Transport-level interception (ASGI) — no handler changes
@@ -31,8 +37,21 @@ Status: alpha (APIs may change before 1.0)
 
 ### Install
 
+Since this library is not yet published to PyPI, install from source:
+
 ```bash
-pip install mcp-db
+# Clone the repository
+git clone https://github.com/yourusername/mcp-db.git
+cd mcp-db
+
+# Install with uv (recommended)
+uv pip install -e .
+
+# Or install with pip
+pip install -e .
+
+# For Redis support
+pip install -e ".[redis]"
 ```
 
 ### Quick Start (Streamable HTTP)
